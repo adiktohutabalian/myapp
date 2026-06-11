@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dos2unix /mnt/c/flutter/bin/internal/shared.sh)",
+      "Bash(flutter analyze *)",
+      "Bash(dart analyze *)"
+    ]
+  }
+}
