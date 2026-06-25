@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 void main() => runApp(
@@ -9,6 +10,7 @@ void main() => runApp(
 
 class Movie {
   final String title, date, genre, description;
+  final String? imageUrl;
   final double rating;
   bool isFavorite;
 
@@ -18,6 +20,7 @@ class Movie {
     this.rating, {
     this.genre = 'Animation',
     this.description = 'No description available.',
+    this.imageUrl,
     this.isFavorite = false,
   });
 }
@@ -35,10 +38,12 @@ class _MovieCatalogState extends State<MovieCatalog> {
   final _movies = [
     Movie('Swallowed Star', '2025', 4.5,
         genre: 'Sci-Fi, Action',
+          imageUrl: 'https://image.tmdb.org/t/p/original/9sC0zY6hMlzejIu2uCC9CfK86iu.jpg',
         description:
             'In a post-apocalyptic world overrun by monsters, a young warrior embarks on a journey to protect humanity and uncover the secrets of the universe.'),
     Movie('Renegade Immortal', '2024', 4.0,
         genre: 'Fantasy, Drama',
+        imageUrl: 'https://en-images.kinorium.com/movie/1080/10356010.jpg?1726747057',
         description:
             'A talented young cultivator faces betrayal and hardship, rising through the ranks of the immortal world through sheer determination and cunning.'),
     Movie('The Great Ruler', '2023', 4.8,
@@ -47,10 +52,12 @@ class _MovieCatalogState extends State<MovieCatalog> {
             'In a world where spiritual power determines one\'s fate, a young man strives to become the greatest ruler by mastering the art of spiritual cultivation.'),
     Movie('Ling Cage', '2022', 4.7,
         genre: 'Sci-Fi, Mecha',
+        imageUrl: 'https://image.tmdb.org/t/p/original/NK9d7KiscPPAMhKHWIVjkcEIZy.jpg',
         description:
             'Humanity\'s last survivors live in a massive mobile city, fighting against alien creatures to reclaim their lost homeland.'),
     Movie('The Last Human', '2021', 4.6,
         genre: 'Post-Apocalyptic',
+        imageUrl: 'https://tse4.mm.bing.net/th/id/OIP.s0Ud7Uq35Pv1WIJSiIVwKQHaKk?rs=1&pid=ImgDetMain&o=7&rm=3',
         description:
             'After a zombie apocalypse, the last surviving human must navigate a world full of dangers while searching for other survivors.'),
     Movie('The Legendary Moonlight Sculptor', '2020', 4.9,
@@ -71,6 +78,14 @@ class _MovieCatalogState extends State<MovieCatalog> {
             'A young boy discovers a portal to a magical world and must learn to harness its power to save both worlds from destruction.'),
   ];
 
+  // 🔵 FutureBuilder ----------------------------------------------------------
+  // Future ini mensimulasikan proses "mengambil data movie dari server/API".
+  // Cuma berjalan SEKALI saat halaman pertama kali dibuka.
+  Future<List<Movie>> _fetchMovies() async {
+    await Future.delayed(const Duration(seconds: 2)); // simulasi delay network
+    return _movies;
+  }
+
   void _toggleFavorite(int index) {
     setState(() {
       _movies[index].isFavorite = !_movies[index].isFavorite;
@@ -85,25 +100,54 @@ class _MovieCatalogState extends State<MovieCatalog> {
           backgroundColor: const Color(0xFFF0F0F5),
           elevation: 0,
         ),
-        body: ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: _movies.length,
-          itemBuilder: (_, i) => _MovieCard(
-            _movies[i],
-            onTap: () async {
-              final updated = await Navigator.push<bool>(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => MovieDetailPage(
-                    movie: _movies[i],
-                    onToggleFavorite: () => _toggleFavorite(i),
-                  ),
+        // 🔵 FutureBuilder ----------------------------------------------------
+        // Karena _fetchMovies() cuma butuh dipanggil sekali sampai datanya
+        // selesai diambil, kita bungkus body-nya dengan FutureBuilder.
+        body: FutureBuilder<List<Movie>>(
+          future: _fetchMovies(),
+          builder: (context, snapshot) {
+            // Selama Future belum selesai -> tampilkan loading
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 12),
+                    Text('Mengambil data film...'),
+                  ],
                 ),
               );
-              if (updated == true) setState(() {});
-            },
-            onFavorite: () => _toggleFavorite(i),
-          ),
+            }
+
+            // Kalau Future selesai tapi error
+            if (snapshot.hasError) {
+              return Center(child: Text('Terjadi kesalahan: ${snapshot.error}'));
+            }
+
+            // Kalau Future selesai dan datanya ada -> tampilkan list seperti biasa
+            final movies = snapshot.data!;
+            return ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: movies.length,
+              itemBuilder: (_, i) => _MovieCard(
+                movies[i],
+                onTap: () async {
+                  final updated = await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MovieDetailPage(
+                        movie: movies[i],
+                        onToggleFavorite: () => _toggleFavorite(i),
+                      ),
+                    ),
+                  );
+                  if (updated == true) setState(() {});
+                },
+                onFavorite: () => _toggleFavorite(i),
+              ),
+            );
+          },
         ),
       );
 }
@@ -135,7 +179,16 @@ class _MovieCard extends StatelessWidget {
                     color: Colors.grey.shade300,
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Icon(Icons.movie, color: Colors.grey, size: 32),
+                  child: movie.imageUrl != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: Image.network(
+                            movie.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => const Icon(Icons.movie, color: Colors.grey, size: 32),
+                          ),
+                        )
+                      : const Icon(Icons.movie, color: Colors.grey, size: 32),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -205,6 +258,34 @@ class MovieDetailPage extends StatefulWidget {
 }
 
 class _MovieDetailPageState extends State<MovieDetailPage> {
+  // 🟢 StreamBuilder 
+  // Stream ini mensimulasikan "rating realtime" yang terus berubah,
+  // seakan-akan ada penonton lain yang sedang memberi rating secara live.
+  // Stream akan mengirim nilai baru setiap 2 detik, terus-menerus,
+  // berbeda dengan Future yang cuma sekali kirim data lalu berhenti.
+  late Stream<double> _liveRatingStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _liveRatingStream = _generateLiveRating(widget.movie.rating);
+  }
+
+  Stream<double> _generateLiveRating(double baseRating) async* {
+    double current = baseRating;
+    final random = DateTime.now().millisecondsSinceEpoch;
+    int seed = random;
+
+    while (true) {
+      await Future.delayed(const Duration(seconds: 2));
+      // simulasi fluktuasi kecil rating, contoh: -0.2 s/d +0.2
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      final delta = ((seed % 41) - 20) / 100; // -0.20 .. +0.20
+      current = (current + delta).clamp(1.0, 5.0);
+      yield current;
+    }
+  }
+
   void _toggle() {
     setState(() {
       widget.movie.isFavorite = !widget.movie.isFavorite;
@@ -243,7 +324,7 @@ class _MovieDetailPageState extends State<MovieDetailPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Poster Placeholder ──
+              // ── Poster ──
               Center(
                 child: Container(
                   width: double.infinity,
@@ -252,8 +333,18 @@ class _MovieDetailPageState extends State<MovieDetailPage> {
                     color: Colors.grey.shade300,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.movie_creation,
-                      color: Colors.grey, size: 80),
+                  child: widget.movie.imageUrl != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            widget.movie.imageUrl!,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: 220,
+                            errorBuilder: (_, _, _) => const Icon(Icons.movie_creation, color: Colors.grey, size: 80),
+                          ),
+                        )
+                      : const Icon(Icons.movie_creation, color: Colors.grey, size: 80),
                 ),
               ),
               const SizedBox(height: 20),
@@ -287,15 +378,49 @@ class _MovieDetailPageState extends State<MovieDetailPage> {
               ),
               const SizedBox(height: 16),
 
-              // ── Rating & Year Row ──
+              // ── Rating (Live, via StreamBuilder) & Year Row ──
               Row(
                 children: [
                   const Icon(Icons.star, color: Colors.amber, size: 22),
                   const SizedBox(width: 6),
-                  Text(
-                    widget.movie.rating.toStringAsFixed(1),
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w600),
+                  // 🟢 StreamBuilder ------------------------------------------
+                  // Setiap kali _liveRatingStream mengirim nilai baru (tiap 2
+                  // detik), bagian Text ini rebuild ulang menampilkan rating
+                  // terkini. Beda dengan FutureBuilder yang cuma rebuild sekali.
+                  StreamBuilder<double>(
+                    stream: _liveRatingStream,
+                    initialData: widget.movie.rating,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return const Text('--');
+                      }
+                      final liveRating = snapshot.data ?? widget.movie.rating;
+                      return Row(
+                        children: [
+                          Text(
+                            liveRating.toStringAsFixed(1),
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'live',
+                            style: TextStyle(fontSize: 11, color: Colors.green),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(width: 24),
                   const Icon(Icons.calendar_today,
